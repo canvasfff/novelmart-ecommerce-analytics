@@ -4,3 +4,6 @@ __pycache__/
 
 # 分析中间产物
 data/processed/
+
+# 面试问答文件不上传
+docs/面试问答20题.md

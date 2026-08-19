@@ -299,7 +299,7 @@ if __name__ == '__main__':
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_dir = os.path.dirname(script_dir)
     md_path = os.path.join(project_dir, 'docs', 'project_report.md')
-    docx_path = os.path.join(project_dir, 'docs', 'NovelMart电商经营分析项目报告.docx')
+    docx_path = os.path.join(project_dir, 'docs', 'Olist电商经营分析项目报告.docx')
 
     print("正在转换项目报告 Markdown → Word...")
     convert_markdown_to_docx(md_path, docx_path)

@@ -1,301 +1,323 @@
 -- ============================================================
--- NovelMart 电商经营分析平台 - MySQL数据库建库建表脚本
--- 数据库名: ecommerce_analysis
--- 创建日期: 2026-07-31
+-- Olist 电商经营分析平台 - MySQL 数据库建库建表脚本
+-- 数据库名: olist_ecommerce
+-- 数据集: Olist Brazilian E-Commerce Public Dataset
+-- 创建日期: 2026-08-19
 -- ============================================================
 
 -- 1. 创建数据库
-DROP DATABASE IF EXISTS ecommerce_analysis;
-CREATE DATABASE ecommerce_analysis
+DROP DATABASE IF EXISTS olist_ecommerce;
+CREATE DATABASE olist_ecommerce
     DEFAULT CHARACTER SET utf8mb4
     DEFAULT COLLATE utf8mb4_unicode_ci;
 
-USE ecommerce_analysis;
+USE olist_ecommerce;
 
 -- ============================================================
--- 2. 创建用户表 (users)
+-- 2. 基础维度表
 -- ============================================================
-CREATE TABLE users (
-    user_id             INT PRIMARY KEY COMMENT '用户唯一标识',
-    username            VARCHAR(50) NOT NULL COMMENT '用户名',
-    real_name           VARCHAR(20) COMMENT '真实姓名',
-    email               VARCHAR(100) COMMENT '电子邮箱',
-    phone               VARCHAR(15) COMMENT '手机号',
-    gender              VARCHAR(4) COMMENT '性别:男/女/未知',
-    age                 INT COMMENT '年龄',
-    province            VARCHAR(20) COMMENT '省份',
-    city                VARCHAR(30) COMMENT '城市/区',
-    registration_date   DATE COMMENT '注册日期',
-    membership_level    VARCHAR(10) DEFAULT '普通会员' COMMENT '会员等级',
-    total_orders        INT DEFAULT 0 COMMENT '累计订单数',
-    total_spent         DECIMAL(12,2) DEFAULT 0.00 COMMENT '累计消费金额',
-    avg_order_value     DECIMAL(10,2) DEFAULT 0.00 COMMENT '平均客单价',
-    first_order_date    DATE COMMENT '首次下单日期',
-    last_order_date     DATE COMMENT '最近下单日期',
-    total_reviews       INT DEFAULT 0 COMMENT '累计评论数',
-    avg_rating_given    DECIMAL(3,1) DEFAULT 0.0 COMMENT '平均给出评分',
-    account_age_days    INT DEFAULT 0 COMMENT '账户年龄(天)',
-    INDEX idx_province (province),
-    INDEX idx_membership (membership_level),
-    INDEX idx_reg_date (registration_date),
-    INDEX idx_age (age)
-) ENGINE=InnoDB COMMENT='用户信息表';
 
+-- 2.1 品类翻译表
+CREATE TABLE category_translation (
+    product_category_name          VARCHAR(100) PRIMARY KEY COMMENT '品类名称（葡萄牙语）',
+    product_category_name_english  VARCHAR(100) NOT NULL COMMENT '品类名称（英文）'
+) ENGINE=InnoDB COMMENT='Olist品类翻译表';
 
--- ============================================================
--- 3. 创建商品表 (products)
--- ============================================================
+-- 2.2 客户表（订单级客户）
+CREATE TABLE customers (
+    customer_id             VARCHAR(50) PRIMARY KEY COMMENT '客户ID（订单级）',
+    customer_unique_id      VARCHAR(50) NOT NULL COMMENT '客户唯一ID',
+    customer_zip_code_prefix INT COMMENT '客户邮编前缀',
+    customer_city           VARCHAR(100) COMMENT '客户城市',
+    customer_state          CHAR(2) COMMENT '客户州',
+    INDEX idx_unique_customer (customer_unique_id),
+    INDEX idx_state (customer_state),
+    INDEX idx_zip (customer_zip_code_prefix)
+) ENGINE=InnoDB COMMENT='Olist客户表';
+
+-- 2.3 客户聚合表（唯一客户维度，供 RFM/价值分析）
+CREATE TABLE customers_agg (
+    customer_unique_id       VARCHAR(50) PRIMARY KEY COMMENT '客户唯一ID',
+    first_order_date         DATETIME COMMENT '首次下单时间',
+    last_order_date          DATETIME COMMENT '最近下单时间',
+    order_count              INT DEFAULT 0 COMMENT '有效订单数',
+    total_payment_value      DECIMAL(12,2) DEFAULT 0.00 COMMENT '累计支付金额',
+    avg_order_value          DECIMAL(10,2) DEFAULT 0.00 COMMENT '平均客单价',
+    customer_zip_code_prefix INT COMMENT '客户邮编前缀',
+    customer_city            VARCHAR(100) COMMENT '客户城市',
+    customer_state           CHAR(2) COMMENT '客户州',
+    review_count             INT DEFAULT 0 COMMENT '评论数',
+    avg_review_score         DECIMAL(3,2) COMMENT '平均评分',
+    INDEX idx_cust_state (customer_state)
+) ENGINE=InnoDB COMMENT='客户聚合汇总表';
+
+-- 2.4 卖家表
+CREATE TABLE sellers (
+    seller_id               VARCHAR(50) PRIMARY KEY COMMENT '卖家ID',
+    seller_zip_code_prefix  INT COMMENT '卖家邮编前缀',
+    seller_city             VARCHAR(100) COMMENT '卖家城市',
+    seller_state            CHAR(2) COMMENT '卖家州',
+    INDEX idx_seller_state (seller_state)
+) ENGINE=InnoDB COMMENT='Olist卖家表';
+
+-- 2.5 商品表（含商品表现聚合字段）
 CREATE TABLE products (
-    product_id      INT PRIMARY KEY COMMENT '商品唯一标识',
-    product_name    VARCHAR(100) NOT NULL COMMENT '商品名称',
-    category        VARCHAR(20) COMMENT '商品大类',
-    subcategory     VARCHAR(30) COMMENT '商品子类',
-    brand           VARCHAR(30) COMMENT '品牌',
-    price           DECIMAL(10,2) NOT NULL COMMENT '售价',
-    cost_price      DECIMAL(10,2) COMMENT '成本价',
-    stock_quantity  INT DEFAULT 0 COMMENT '库存数量',
-    sales_count     INT DEFAULT 0 COMMENT '累计销量',
-    rating_avg      DECIMAL(3,1) DEFAULT 0.0 COMMENT '平均评分',
-    listing_date    DATE COMMENT '上架日期',
-    status          VARCHAR(10) DEFAULT '在售' COMMENT '商品状态:在售/下架/缺货',
-    INDEX idx_category (category),
-    INDEX idx_subcategory (subcategory ASC),
-    INDEX idx_brand (brand),
-    INDEX idx_price (price),
-    INDEX idx_status (status),
-    INDEX idx_rating (rating_avg)
-) ENGINE=InnoDB COMMENT='商品信息表';
+    product_id                   VARCHAR(50) PRIMARY KEY COMMENT '商品ID',
+    product_category_name        VARCHAR(100) COMMENT '商品品类（葡萄牙语）',
+    product_category_name_english VARCHAR(100) COMMENT '商品品类（英文）',
+    product_name_lenght          INT COMMENT '商品名称长度',
+    product_description_lenght   INT COMMENT '商品描述长度',
+    product_photos_qty           INT COMMENT '商品图片数量',
+    product_weight_g             INT COMMENT '商品重量（克）',
+    product_length_cm            INT COMMENT '商品长度（厘米）',
+    product_height_cm            INT COMMENT '商品高度（厘米）',
+    product_width_cm             INT COMMENT '商品宽度（厘米）',
+    order_count                  INT DEFAULT 0 COMMENT '有效订单数',
+    quantity_sold                INT DEFAULT 0 COMMENT '销售件数（明细行数）',
+    price_sum                    DECIMAL(12,2) DEFAULT 0.00 COMMENT '商品销售额',
+    freight_sum                  DECIMAL(12,2) DEFAULT 0.00 COMMENT '运费总额',
+    revenue                      DECIMAL(12,2) DEFAULT 0.00 COMMENT '商品+运费总营收',
+    avg_price                    DECIMAL(10,2) DEFAULT 0.00 COMMENT '平均售价',
+    review_count                 INT DEFAULT 0 COMMENT '关联评论数',
+    avg_review_score             DECIMAL(3,2) COMMENT '平均评论评分',
+    INDEX idx_category (product_category_name),
+    INDEX idx_category_en (product_category_name_english),
+    INDEX idx_revenue (revenue)
+) ENGINE=InnoDB COMMENT='Olist商品表';
 
+-- 2.6 地理表（邮编前缀聚合）
+CREATE TABLE geolocation (
+    geolocation_zip_code_prefix INT NOT NULL COMMENT '邮编前缀',
+    geolocation_lat             DECIMAL(10,7) COMMENT '纬度',
+    geolocation_lng             DECIMAL(10,7) COMMENT '经度',
+    geolocation_city            VARCHAR(100) COMMENT '城市',
+    geolocation_state           CHAR(2) COMMENT '州',
+    KEY idx_geo_zip (geolocation_zip_code_prefix),
+    KEY idx_geo_state (geolocation_state)
+) ENGINE=InnoDB COMMENT='Olist地理信息表（按邮编聚合）';
 
 -- ============================================================
--- 4. 创建订单表 (orders)
+-- 3. 事实表
 -- ============================================================
+
+-- 3.1 订单表
 CREATE TABLE orders (
-    order_id            INT PRIMARY KEY COMMENT '订单唯一标识',
-    user_id             INT NOT NULL COMMENT '用户ID',
-    order_date          DATETIME COMMENT '下单时间',
-    total_amount        DECIMAL(12,2) DEFAULT 0.00 COMMENT '商品总金额',
-    discount_amount     DECIMAL(10,2) DEFAULT 0.00 COMMENT '折扣金额',
-    actual_amount       DECIMAL(12,2) DEFAULT 0.00 COMMENT '实付金额(含运费)',
-    payment_method      VARCHAR(15) COMMENT '支付方式',
-    shipping_method     VARCHAR(10) COMMENT '配送方式',
-    shipping_cost       DECIMAL(8,2) DEFAULT 0.00 COMMENT '运费',
-    order_status        VARCHAR(10) DEFAULT '待付款' COMMENT '订单状态',
-    shipping_province   VARCHAR(20) COMMENT '收货省份',
-    shipping_city       VARCHAR(30) COMMENT '收货城市',
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    INDEX idx_user (user_id),
-    INDEX idx_order_date (order_date),
+    order_id                        VARCHAR(50) PRIMARY KEY COMMENT '订单ID',
+    customer_id                     VARCHAR(50) NOT NULL COMMENT '客户ID',
+    customer_unique_id              VARCHAR(50) COMMENT '客户唯一ID',
+    customer_zip_code_prefix        INT COMMENT '客户邮编前缀',
+    customer_city                   VARCHAR(100) COMMENT '客户城市',
+    customer_state                  CHAR(2) COMMENT '客户州',
+    order_status                    VARCHAR(20) COMMENT '订单状态',
+    order_status_cn                 VARCHAR(20) COMMENT '订单状态中文',
+    order_purchase_timestamp        DATETIME COMMENT '下单时间',
+    order_approved_at               DATETIME COMMENT '支付/审批时间',
+    order_delivered_carrier_date    DATETIME COMMENT '交承运商时间',
+    order_delivered_customer_date   DATETIME COMMENT '送达客户时间',
+    order_estimated_delivery_date   DATETIME COMMENT '预计送达时间',
+    payment_count                   INT DEFAULT 0 COMMENT '支付笔数',
+    payment_installments            INT DEFAULT 0 COMMENT '最大分期期数',
+    payment_value                   DECIMAL(12,2) DEFAULT 0.00 COMMENT '订单支付总额',
+    payment_type                    VARCHAR(20) COMMENT '主支付方式',
+    item_count                      INT DEFAULT 0 COMMENT '商品明细行数',
+    total_price                     DECIMAL(12,2) DEFAULT 0.00 COMMENT '商品总额',
+    total_freight                   DECIMAL(12,2) DEFAULT 0.00 COMMENT '运费总额',
+    total_order_value               DECIMAL(12,2) DEFAULT 0.00 COMMENT '订单总价值',
+    delivery_days                   DECIMAL(8,2) COMMENT '实际送达天数',
+    estimated_delivery_days         DECIMAL(8,2) COMMENT '预计送达天数',
+    delivery_delay_days             DECIMAL(8,2) COMMENT '送达延迟天数',
+    is_on_time                      TINYINT(1) COMMENT '是否准时送达',
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+    INDEX idx_customer (customer_id),
+    INDEX idx_unique_customer (customer_unique_id),
     INDEX idx_status (order_status),
-    INDEX idx_payment (payment_method)
-) ENGINE=InnoDB COMMENT='订单信息表';
+    INDEX idx_purchase_time (order_purchase_timestamp),
+    INDEX idx_state (customer_state)
+) ENGINE=InnoDB COMMENT='Olist订单事实表';
 
-
--- ============================================================
--- 5. 创建订单明细表 (order_items)
--- ============================================================
+-- 3.2 订单明细表
 CREATE TABLE order_items (
-    item_id     INT PRIMARY KEY COMMENT '明细唯一标识',
-    order_id    INT NOT NULL COMMENT '订单ID',
-    product_id  INT NOT NULL COMMENT '商品ID',
-    quantity    INT DEFAULT 1 COMMENT '购买数量',
-    unit_price  DECIMAL(10,2) NOT NULL COMMENT '成交单价',
-    discount    DECIMAL(4,2) DEFAULT 0.00 COMMENT '折扣比例(0-1)',
-    FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
-    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE,
-    INDEX idx_order (order_id),
-    INDEX idx_product (product_id)
-) ENGINE=InnoDB COMMENT='订单明细表';
-
-
--- ============================================================
--- 6. 创建评论表 (reviews)
--- ============================================================
-CREATE TABLE reviews (
-    review_id           INT PRIMARY KEY COMMENT '评论唯一标识',
-    user_id             INT NOT NULL COMMENT '用户ID',
-    product_id          INT NOT NULL COMMENT '商品ID',
-    order_id            INT NOT NULL COMMENT '订单ID',
-    rating              TINYINT CHECK (rating BETWEEN 1 AND 5) COMMENT '评分(1-5)',
-    review_text         TEXT COMMENT '评论内容',
-    review_date         DATE COMMENT '评论日期',
-    is_verified_purchase BOOLEAN DEFAULT TRUE COMMENT '是否认证购买',
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE,
-    FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
-    INDEX idx_user (user_id),
+    order_id            VARCHAR(50) NOT NULL COMMENT '订单ID',
+    order_item_id       INT NOT NULL COMMENT '订单内商品序号',
+    product_id          VARCHAR(50) NOT NULL COMMENT '商品ID',
+    seller_id           VARCHAR(50) NOT NULL COMMENT '卖家ID',
+    shipping_limit_date DATETIME COMMENT '卖家发货截止时间',
+    price               DECIMAL(10,2) DEFAULT 0.00 COMMENT '商品单价',
+    freight_value       DECIMAL(10,2) DEFAULT 0.00 COMMENT '该商品运费',
+    PRIMARY KEY (order_id, order_item_id),
+    FOREIGN KEY (order_id) REFERENCES orders(order_id),
+    FOREIGN KEY (product_id) REFERENCES products(product_id),
+    FOREIGN KEY (seller_id) REFERENCES sellers(seller_id),
     INDEX idx_product (product_id),
-    INDEX idx_rating (rating),
-    INDEX idx_review_date (review_date)
-) ENGINE=InnoDB COMMENT='商品评论表';
+    INDEX idx_seller (seller_id)
+) ENGINE=InnoDB COMMENT='Olist订单明细表';
 
+-- 3.3 支付表
+CREATE TABLE order_payments (
+    order_id             VARCHAR(50) NOT NULL COMMENT '订单ID',
+    payment_sequential   INT NOT NULL COMMENT '支付序号',
+    payment_type         VARCHAR(20) COMMENT '支付方式',
+    payment_installments INT DEFAULT 0 COMMENT '分期期数',
+    payment_value        DECIMAL(10,2) DEFAULT 0.00 COMMENT '支付金额',
+    PRIMARY KEY (order_id, payment_sequential),
+    FOREIGN KEY (order_id) REFERENCES orders(order_id),
+    INDEX idx_payment_type (payment_type)
+) ENGINE=InnoDB COMMENT='Olist订单支付表';
+
+-- 3.4 评论表
+CREATE TABLE order_reviews (
+    review_id                VARCHAR(50) PRIMARY KEY COMMENT '评论ID',
+    order_id                 VARCHAR(50) NOT NULL COMMENT '订单ID',
+    review_score             TINYINT COMMENT '评分(1-5)',
+    review_comment_title     VARCHAR(255) COMMENT '评论标题',
+    review_comment_message   TEXT COMMENT '评论内容',
+    review_creation_date     DATETIME COMMENT '评论创建时间',
+    review_answer_timestamp  DATETIME COMMENT '评论回复时间',
+    FOREIGN KEY (order_id) REFERENCES orders(order_id),
+    INDEX idx_order (order_id),
+    INDEX idx_score (review_score),
+    INDEX idx_review_date (review_creation_date)
+) ENGINE=InnoDB COMMENT='Olist订单评论表';
 
 -- ============================================================
--- 7. 创建视图 - 用户消费总览
+-- 4. 分析视图
 -- ============================================================
-CREATE VIEW v_user_spending_summary AS
+
+-- 4.1 订单级分析视图：订单 + 客户 + 商品明细金额
+CREATE VIEW v_order_facts AS
 SELECT
-    u.user_id,
-    u.real_name,
-    u.province,
-    u.membership_level,
-    u.total_spent,
-    u.total_orders,
-    u.avg_order_value,
-    u.total_reviews,
-    u.avg_rating_given,
-    u.account_age_days,
-    ROUND(u.total_spent / NULLIF(u.account_age_days, 0), 2) AS daily_avg_spent,
-    CASE
-        WHEN u.total_spent >= 50000 THEN '高价值'
-        WHEN u.total_spent >= 10000 THEN '中价值'
-        WHEN u.total_spent >= 1000 THEN '普通价值'
-        ELSE '低价值'
-    END AS customer_value_segment
-FROM users u;
+    o.order_id,
+    o.customer_unique_id,
+    o.customer_city,
+    o.customer_state,
+    o.order_status,
+    o.order_status_cn,
+    o.order_purchase_timestamp,
+    o.order_approved_at,
+    o.order_delivered_customer_date,
+    o.order_estimated_delivery_date,
+    o.payment_value,
+    o.payment_type,
+    o.item_count,
+    o.total_price,
+    o.total_freight,
+    o.total_order_value,
+    o.delivery_days,
+    o.delivery_delay_days,
+    o.is_on_time
+FROM orders o
+WHERE o.order_status IN ('delivered','shipped','invoiced','processing','created','approved');
 
-
--- ============================================================
--- 8. 创建视图 - 商品销售表现
--- ============================================================
+-- 4.2 商品销售表现视图
 CREATE VIEW v_product_performance AS
 SELECT
     p.product_id,
-    p.product_name,
-    p.category,
-    p.subcategory,
-    p.brand,
-    p.price,
-    p.cost_price,
-    p.sales_count,
-    p.rating_avg,
-    p.stock_quantity,
-    ROUND(p.price - p.cost_price, 2) AS profit_per_unit,
-    ROUND((p.price - p.cost_price) / NULLIF(p.price, 0) * 100, 2) AS profit_margin_pct,
-    ROUND(p.sales_count * (p.price - p.cost_price), 2) AS estimated_total_profit,
-    p.status,
-    CASE
-        WHEN p.rating_avg >= 4.5 THEN '好评如潮'
-        WHEN p.rating_avg >= 4.0 THEN '好评'
-        WHEN p.rating_avg >= 3.0 THEN '中评'
-        WHEN p.rating_avg >= 2.0 THEN '差评'
-        ELSE '很差'
-    END AS rating_level
+    p.product_category_name,
+    p.product_category_name_english,
+    p.product_weight_g,
+    p.quantity_sold,
+    p.order_count,
+    p.price_sum,
+    p.freight_sum,
+    p.revenue,
+    p.avg_price,
+    p.review_count,
+    p.avg_review_score,
+    ROUND(p.revenue / NULLIF(p.quantity_sold, 0), 2) AS revenue_per_unit,
+    ROUND(p.freight_sum / NULLIF(p.revenue, 0) * 100, 2) AS freight_rate_pct
 FROM products p;
 
-
--- ============================================================
--- 9. 创建视图 - 月度销售统计
--- ============================================================
-CREATE VIEW v_monthly_sales AS
+-- 4.3 客户价值视图
+CREATE VIEW v_customer_summary AS
 SELECT
-    DATE_FORMAT(o.order_date, '%Y-%m') AS month,
-    COUNT(DISTINCT o.order_id) AS order_count,
-    COUNT(DISTINCT o.user_id) AS unique_customers,
-    SUM(o.total_amount) AS total_revenue,
-    SUM(o.discount_amount) AS total_discount,
-    SUM(o.actual_amount) AS actual_revenue,
-    ROUND(AVG(o.actual_amount), 2) AS avg_order_value,
-    SUM(oi.quantity) AS total_units_sold
-FROM orders o
-JOIN order_items oi ON o.order_id = oi.order_id
-WHERE o.order_status IN ('已完成', '待发货', '已发货')   -- 有效订单口径
-GROUP BY DATE_FORMAT(o.order_date, '%Y-%m')
-ORDER BY month DESC;
-
+    c.customer_unique_id,
+    c.customer_city,
+    c.customer_state,
+    c.first_order_date,
+    c.last_order_date,
+    c.order_count,
+    c.total_payment_value,
+    c.avg_order_value,
+    c.review_count,
+    c.avg_review_score,
+    ROUND(c.total_payment_value / NULLIF(DATEDIFF(c.last_order_date, c.first_order_date) + 1, 0), 2) AS daily_value
+FROM customers_agg c;
 
 -- ============================================================
--- 10. 存储过程 - 计算用户RFM值
+-- 5. 存储过程：RFM 客户分群
 -- ============================================================
 DELIMITER //
 
 CREATE PROCEDURE sp_calculate_rfm()
 BEGIN
-    DECLARE ref_date DATE;
-    -- RFM 参考日期取订单表最大日期，避免硬编码导致后续数据更新后口径失真
-    SET ref_date = (SELECT MAX(DATE(order_date)) FROM orders);
+    DECLARE ref_date DATETIME;
+    SET ref_date = (SELECT MAX(order_purchase_timestamp) FROM orders);
 
     DROP TABLE IF EXISTS rfm_analysis;
     CREATE TABLE rfm_analysis AS
     SELECT
-        u.user_id,
-        u.real_name,
-        u.membership_level,
-        DATEDIFF(ref_date, MAX(o.order_date)) AS recency_days,
+        c.customer_unique_id,
+        c.customer_state,
+        c.customer_city,
+        DATEDIFF(ref_date, MAX(o.order_purchase_timestamp)) AS recency_days,
         COUNT(DISTINCT o.order_id) AS frequency,
-        ROUND(SUM(o.actual_amount), 2) AS monetary,
+        ROUND(SUM(o.payment_value), 2) AS monetary,
         CASE
-            WHEN DATEDIFF(ref_date, MAX(o.order_date)) <= 30 THEN 5
-            WHEN DATEDIFF(ref_date, MAX(o.order_date)) <= 90 THEN 4
-            WHEN DATEDIFF(ref_date, MAX(o.order_date)) <= 180 THEN 3
-            WHEN DATEDIFF(ref_date, MAX(o.order_date)) <= 365 THEN 2
+            WHEN DATEDIFF(ref_date, MAX(o.order_purchase_timestamp)) <= 90 THEN 4
+            WHEN DATEDIFF(ref_date, MAX(o.order_purchase_timestamp)) <= 180 THEN 3
+            WHEN DATEDIFF(ref_date, MAX(o.order_purchase_timestamp)) <= 365 THEN 2
             ELSE 1
         END AS r_score,
         CASE
-            WHEN COUNT(DISTINCT o.order_id) >= 20 THEN 5
-            WHEN COUNT(DISTINCT o.order_id) >= 10 THEN 4
-            WHEN COUNT(DISTINCT o.order_id) >= 5 THEN 3
+            WHEN COUNT(DISTINCT o.order_id) >= 5 THEN 4
+            WHEN COUNT(DISTINCT o.order_id) >= 3 THEN 3
             WHEN COUNT(DISTINCT o.order_id) >= 2 THEN 2
             ELSE 1
         END AS f_score,
         CASE
-            WHEN SUM(o.actual_amount) >= 50000 THEN 5
-            WHEN SUM(o.actual_amount) >= 20000 THEN 4
-            WHEN SUM(o.actual_amount) >= 5000 THEN 3
-            WHEN SUM(o.actual_amount) >= 1000 THEN 2
+            WHEN SUM(o.payment_value) >= 1000 THEN 4
+            WHEN SUM(o.payment_value) >= 500 THEN 3
+            WHEN SUM(o.payment_value) >= 200 THEN 2
             ELSE 1
         END AS m_score
-    FROM users u
-    LEFT JOIN orders o ON u.user_id = o.user_id
-        AND o.order_status IN ('已完成', '待发货', '已发货')   -- 只统计有效订单
-    GROUP BY u.user_id, u.real_name, u.membership_level;
+    FROM customers_agg c
+    LEFT JOIN orders o
+        ON c.customer_unique_id = o.customer_unique_id
+        AND o.order_status IN ('delivered','shipped','invoiced','processing','created','approved')
+    GROUP BY c.customer_unique_id, c.customer_state, c.customer_city;
 
-    -- 计算综合RFM分数
     ALTER TABLE rfm_analysis ADD COLUMN rfm_total INT;
     ALTER TABLE rfm_analysis ADD COLUMN rfm_segment VARCHAR(20);
     UPDATE rfm_analysis SET rfm_total = r_score + f_score + m_score;
     UPDATE rfm_analysis SET rfm_segment =
         CASE
-            WHEN rfm_total >= 13 THEN '高价值客户'
-            WHEN rfm_total >= 9 THEN '中价值客户'
-            WHEN rfm_total >= 5 THEN '一般客户'
+            WHEN rfm_total >= 10 THEN '高价值客户'
+            WHEN rfm_total >= 7 THEN '中价值客户'
+            WHEN rfm_total >= 4 THEN '一般客户'
             ELSE '低价值客户'
         END;
-
-    SELECT rfm_segment, COUNT(*) AS cnt,
-           ROUND(AVG(monetary), 2) AS avg_monetary
-    FROM rfm_analysis GROUP BY rfm_segment;
-END //
+END//
 
 DELIMITER ;
 
-
 -- ============================================================
--- 11. 触发器 - 新评论自动更新商品评分
+-- 6. 触发器：防止非法评分写入
 -- ============================================================
 DELIMITER //
 
-CREATE TRIGGER trg_update_product_rating
-AFTER INSERT ON reviews
+CREATE TRIGGER trg_order_reviews_check_score
+BEFORE INSERT ON order_reviews
 FOR EACH ROW
 BEGIN
-    UPDATE products p
-    SET p.rating_avg = (
-        SELECT ROUND(AVG(r.rating), 1)
-        FROM reviews r
-        WHERE r.product_id = NEW.product_id
-    )
-    WHERE p.product_id = NEW.product_id;
-END //
+    IF NEW.review_score < 1 OR NEW.review_score > 5 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'review_score must be between 1 and 5';
+    END IF;
+END//
 
 DELIMITER ;
 
-
 -- ============================================================
--- 12. 索引优化(覆盖常用查询)
+-- 7. 验证
 -- ============================================================
-CREATE INDEX idx_orders_user_date ON orders(user_id, order_date);
-CREATE INDEX idx_orders_status_date ON orders(order_status, order_date);
-CREATE INDEX idx_order_items_order_product ON order_items(order_id, product_id);
-CREATE INDEX idx_reviews_product_rating ON reviews(product_id, rating);
-CREATE INDEX idx_products_cat_sales ON products(category, sales_count DESC);
+SELECT '数据库创建完成' AS status;
